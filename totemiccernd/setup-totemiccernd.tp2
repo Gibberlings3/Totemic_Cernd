@@ -1,0 +1,194 @@
+/* Totemic Cernd v1.6
+ *
+ * This modification changes Cernd's kit from a Shapeshifter
+ * to a Totemic Druid and also somewhat increases his physical
+ * attributes, STR,DEX,CON,etc.,.
+ *
+ */
+
+BACKUP ~totemiccernd/backup~
+
+AUTHOR ~cirerrek@hotmail.com~
+
+VERSION ~v3~
+
+README ~totemiccernd/readme-totemiccernd.html~
+
+LANGUAGE ~AMERICAN ENGLISH~      ~american~ ~totemiccernd/lang/american/tcsetup.tra~
+LANGUAGE ~French (by Isaya)~     ~french~   ~totemiccernd/lang/american/tcsetup.tra~
+                                            ~totemiccernd/lang/french/tcsetup.tra~
+LANGUAGE ~German (by Hurricane)~ ~german~   ~totemiccernd/lang/american/tcsetup.tra~
+                                            ~totemiccernd/lang/german/tcsetup.tra~
+LANGUAGE ~Italian (by Aedan)~    ~italian~  ~totemiccernd/lang/american/tcsetup.tra~
+                                            ~totemiccernd/lang/italian/tcsetup.tra~
+LANGUAGE ~Polish (by Chair)~     ~polish~   ~totemiccernd/lang/american/tcsetup.tra~
+                                            ~totemiccernd/lang/polish/tcsetup.tra~
+
+BEGIN @1
+
+//----------------------------------------------------
+// Creatures
+//----------------------------------------------------
+
+//cernd10, cernd12, cernd13, cernd13B, cernd14
+
+/*
+*
+* my Short Long byte noobness notes as specifically related to kit paramaters in a version 1.0 .cre file
+*
+* the value for a kit is a long
+* 0x244,0x245, 0x246, 0x247 (4 bytes = Long (Long Integer) or Dword (Double Word))
+* 0x244 and 0x245 are set to zero at the same time by WRITE_SHORT 0x244 0
+* a Short (Short Integer), Integer or Word is comprised of two bytes
+*
+*
+*  my regexp noobness notes
+*
+*   . matches any character except newline
+*   * (postfix) matches the previous expression zero, one or several times
+*   \. regexps with a \ in front of them are treated as ordinary (\. really means this is a plain ol' period, not a regexp)
+*
+*  So, in a nutshell it says look for all .cre files that begin with cernd, have none or any number of characters following cernd, and copy the files to the override folder
+*
+*/
+INCLUDE ~totemiccernd/lib/kit_ids_fixer.tpa~ // fix kit.ids, from Fixpack v11
+
+COPY_EXISTING ~cernd10.cre~  ~override~
+              ~cernd12.cre~  ~override~
+              ~cernd13.cre~  ~override~
+              ~cernd13b.cre~ ~override~
+              ~cernd14.cre~  ~override~
+  PATCH_IF ("%SOURCE_FILE%" STRING_COMPARE_CASE "cernd14.cre" = 0) BEGIN // if this is ToB Cernd then patch the file
+    WRITE_ASCII 0x248 ~cern25~ #16 // extra-long write to set override and blank dupe class script
+  END ELSE BEGIN
+    WRITE_ASCII 0x248 ~cernd~ #8 // set override script for soa
+  END
+  WRITE_LONG 0x0244 0x40100000
+  WRITE_BYTE   0x0238 16   // changes strength to 16
+  WRITE_BYTE   0x023c 17   // changes dexterity to 17
+  WRITE_BYTE   0x023d 16   // changes constituion to 16
+  BUT_ONLY IF_EXISTS
+
+//----------------------------------------------------
+// Scripts
+//----------------------------------------------------
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// cirerrek
+//
+// Script Additions: 
+//
+// Triggers: HasItem("MINHP1","Cernd")  // and I am Cernd and I have the item
+//
+// Actions: ActionOverride("cernd",DestroyItem("MINHP1") // destroy the item
+//
+// Version: Un-tested BETA
+//
+// Purpose: In its original form the following segment of AR1901.bcs affects Cernd
+//          whether he is in the party or not, therefore I needed to account for either
+//          possibility.  So I copied the original segment and modified them both to become
+//          true depending on whether or not Cernd has the MINHP1.ITM.  If he does
+//          then the first segment will come true and the item will be destroyed.  
+//          If he does not, the second segment will come true and business should continue
+//          as usual.
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// cirerrek
+//
+// Script Additions: 
+//
+// Triggers: !HasItem("MINHP1","Cernd")  // and I am Cernd and I have the item
+//
+// Version: Un-tested BETA
+//
+// Purpose: This segment should come true if Cernd does not have MINHP1.ITM
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+// CamDawg change: include a call to destroy minhp1, regardless of whether Cernd has it--avoid dupe script block
+COPY_EXISTING ~ar1901.bcs~ ~override~
+  DECOMPILE_BCS_TO_BAF
+    REPLACE_TEXTUALLY ~ActionOverride("cernd",ChangeAIScript("CERND",OVERRIDE))~
+    ~ActionOverride("cernd",DestroyItem("MINHP1"))
+     ActionOverride("cernd",ChangeAIScript("CERND",OVERRIDE))~
+  COMPILE_BAF_TO_BCS
+  BUT_ONLY_IF_IT_CHANGES
+
+// * Commented out to prevent CEFALD01.BCS from forcing Cernd into transforming
+// * into a werewolf
+// CamDawg: Just False()ing the block
+COPY_EXISTING ~cefald01.bcs~ ~override~
+  DECOMPILE_BCS_TO_BAF
+    REPLACE_TEXTUALLY ~Global("change","LOCALS",0)~ ~False()~
+  COMPILE_BAF_TO_BCS
+  BUT_ONLY_IF_IT_CHANGES
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+//
+// cirerrek
+//
+// Script Additions: ActionOverride("Cernd",GiveItemCreate("MINHP1","Cernd",0,0,0))   // give item
+//                   ActionOverride("Cernd",FillSlot(SLOT_AMULET)                     // equip in slot
+//                   ActionOverride("Cernd",Spell("CEFALD01",4621)) // TOTEMICDRUID_SUMMON_ANIMAL_SPIRIT
+//
+// Version: Un-tested BETA
+//
+// Purpose:  Cut35i is called when Cernd challenges Faldorn and is not in the party.
+//           In the original version, Faldorn's script (CEFALD01.BCS) forces Cernd to turn into a special
+//           version of his werewolf form CEBEAR01.CRE through the use of the spell CERND_BEAR
+//           CEBEAR01.CRE comes equipped with MINHP1.ITM, which means CEBEAR01.CRE can't lose
+//           the fight.  To duplicate this effect, while avoiding the transformation to a werewolf
+//           the modifications I have made to this cutscene are intended to give Cernd the MINHP1.ITM
+//           have him equip it and then cast a summoning spell from Cernd's new kit to distract Faldorn
+//
+// Notes:    1. Since 4621 TOTEMICDRUID_SUMMON_ANIMAL_SPIRIT requires a fix for it to be cast using the trigger HaveSpell()
+//              I'll need to include the fixed version with the MOD.
+//           2. I will also want to investigate the use of ForceSpell() and ReallyForceSpell() because Cernd may not
+//              have this spell in memory at the time of the challenge
+//
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+ACTION_IF FILE_EXISTS_IN_GAME ~spcl621.2da~ THEN BEGIN // EE changes totemic summons to a menu-style spell like spell immunity
+
+  OUTER_SET spell = 4625 // this will cause Cernd to cast the spirit wolf spell directly
+
+END ELSE BEGIN
+
+  OUTER_SET spell = 4621 // for non-EE, just cause the totemic summons
+
+  // update cernd's stuff to match his usability - EE does this with a 319, so not needed there
+  COPY_EXISTING ~NPCLCK.ITM~ ~override~ //Cloak of the High Forest
+                ~NPSTAF.ITM~ ~override~ //Staff of the High Forest
+    WRITE_BYTE 0x26 16 // sets minimum strength requirement to 16
+    WRITE_BYTE 0x2C 17 // sets minimum dexterity requirement to 17
+    WRITE_BYTE 0x30 16 // sets minimum constitution requirement to 16
+    WRITE_BYTE 0x29 0b01110000 //sets useability (from left to right) wild mage (yes), barbarian (no), avenger druid (no), shapesifter druid (no), totemic druid (yes), cleric of lathander (yes), cleric of helm (yes), cleric of talos (yes)
+    WRITE_BYTE 0x21 0b10110111 //sets useability (from left to right) half-orc (no), druid (yes), monk (no), gnome (no), human (yes), halfling (no), half-elf (no), dwarf (no)
+    BUT_ONLY
+
+END
+
+
+// adding via R_T
+COPY_EXISTING ~cut35i.bcs~ ~override~
+  DECOMPILE_BCS_TO_BAF
+    REPLACE_TEXTUALLY ~ActionOverride("Cernd",Face([4W]))~ // grumble, grumble, dir.ids
+    ~ActionOverride("Cernd",Face(4))
+     ActionOverride("Cernd",GiveItemCreate("MINHP1","Cernd",0,0,0))   // give item
+     ActionOverride("Cernd",FillSlot(0))                    // WeiDU can have issues with slot.ids, so using numeric SLOT_AMULET value
+     ActionOverride("Cernd",ForceSpell("CEFALD01",%spell%)) // TOTEMICDRUID_SUMMON_ANIMAL_SPIRIT~
+  COMPILE_BAF_TO_BCS
+  BUT_ONLY_IF_IT_CHANGES
+
+//----------------------------------------------------
+//Summon Animal Spirit (Totemic Druid)
+//----------------------------------------------------
+COPY_EXISTING ~SPCL621.SPL~ ~override~
+              ~SPCL625.SPL~ ~override~
+  WRITE_LONG 0x34 1
+  BUT_ONLY IF_EXISTS
+
+// EOF: Setup-Totemic_Cernd.tp2
